@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Build and submit a Codex prompt for fixing Dependabot security alerts.
 
-Usage:
+Example Usage:
+  env GITHUB_TOKEN=... \
   python3 resolve_security_alerts.py \
-      --codex /path/to/run_codex.sh \
+      --codex .../path/to/run_codex.sh \
       --project CHARM-BDF/charmonator \
       --cmdtest 'npm run test:all'
+
+  Where run_codex.sh is a script that finds/configures your credentials and passes
+  all remaining arguments using bash "$@" or similar.
 """
 
 from __future__ import annotations
