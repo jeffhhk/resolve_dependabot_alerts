@@ -83,7 +83,7 @@ We can see success via 16 passing tests before and after:
 
 ## When and how this works
 
-The concept of automatic vulnerability scanning is predicated on having a language and package manager to be getting CVE and package metadata curation.  Out of the box, codex understands the mainstream package managers with security metadata.  Here's an example of what you will see while this script runs:
+The concept of automatic vulnerability scanning is predicated on having a language and package manager popular enough to be getting CVE and package metadata curation.  Out of the box, codex understands the mainstream package managers with security metadata.  Here's an example of what you will see while this script runs:
 
     . . .
     $ npm view @aws-sdk/xml-builder version
