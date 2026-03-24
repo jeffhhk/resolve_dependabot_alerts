@@ -3,7 +3,7 @@
 
 Example Usage:
   env GITHUB_TOKEN=... \
-  python3 resolve_security_alerts.py \
+  python3 resolve_dependabot_alerts.py \
       --codex .../path/to/run_codex.sh \
       --project CHARM-BDF/charmonator \
       --cmdtest 'npm run test:all'
