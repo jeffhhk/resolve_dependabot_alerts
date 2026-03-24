@@ -81,9 +81,54 @@ We can see success via 16 passing tests before and after:
             - tar-fs -> 3.1.2
             - cross-spawn -> 7.0.6
 
-## Rescanning your result
+## When and how this works
 
-Github does not currently provide a local double of its repository scanning capability, it is difficult to approximate how it will look at your repository without actually pushing it.  So instead, use this process:
+The concept of automatic vulnerability scanning is predicated on having a language and package manager to be getting CVE and package metadata curation.  Out of the box, codex understands the mainstream package managers with security metadata.  Here's an example of what you will see while this script runs:
+
+    . . .
+    $ npm view @aws-sdk/xml-builder version
+    3.972.15
+    ✓ • 370ms
+    
+    $ npm pkg set overrides.'@aws-sdk/core'='3.973.24' overrides.'@aws-sdk/xml-builder'='3.972.15'
+    ✓ • 145ms
+    
+    $ npm install
+    
+    > charmonator@1.0.0 postinstall
+    > mkdir -p test/data && touch test/data/05-versions-space.pdf  # pdf-parse workaround
+    
+    
+    added 7 packages, changed 51 packages, and audited 740 packages in 3s
+    
+    70 packages are looking for funding
+    run `npm fund` for details
+    
+    34 vulnerabilities (3 low, 24 moderate, 7 high)
+    
+    To address issues that do not require attention, run:
+    npm audit fix
+    
+    To address all issues (including breaking changes), run:
+    npm audit fix --force
+    
+    Run `npm audit` for details.
+    ✓ • 2.84s
+    
+    $ npm audit --json | jq '.vulnerabilities | to_entries[] | select(.value.severity=="critical"
+        or .value.severity=="high") | {name:.key, severity:.value.severity, range:.value.range,
+        fixAvailable:.value.fixAvailable}'
+    {
+    "name": "cross-spawn",
+    "severity": "high",
+    "range": "<6.0.6",
+    "fixAvailable": true
+    }
+    . . .
+
+## Double checking your result
+
+Because Github does not currently provide a local double of its repository scanning capability, it is difficult to approximate how it will look at your repository without actually pushing it.  So instead, use this process:
 
 (1) Push your repository to your official branch
 
