@@ -1,106 +1,100 @@
 #!/usr/bin/env python3
-"""Run a fixed Codex prompt through a user-provided Codex runner.
+"""Build and submit a Codex prompt for fixing Dependabot security alerts.
 
 Usage:
-    python resolve_security_alerts.py /path/to/run_codex.sh
-
-The runner is expected to accept the full prompt as a single positional
-argument. If the runner is a Python script, this wrapper invokes it with the
-current Python interpreter.
+  python3 resolve_security_alerts.py \
+      --codex /path/to/run_codex.sh \
+      --project CHARM-BDF/charmonator \
+      --cmdtest 'npm run test:all'
 """
 
 from __future__ import annotations
 
+import argparse
 import os
-import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
 
-PROMPT_TEMPLATE = """You have been provided an environment variable GITHUB_TOKEN. This REST call reveals some security vulnerabilities:
 
-    curl -H \"Authorization: Bearer ${GITHUB_TOKEN}\" \\
-         https://api.github.com/repos/CHARM-BDF/charmonator/dependabot/alerts
+def build_prompt(project: str, cmdtest: str) -> str:
+    return f"""You have been provided an environment variable GITHUB_TOKEN.  This REST call reveals some security vulnerabilities:
 
-The directory {repo_path} contains a working copy of this repository.
+    curl -H \"Authorization: Bearer ${{GITHUB_TOKEN}}\" \\
+         https://api.github.com/repos/{project}/dependabot/alerts
+
+The current directory contains a working copy of this repository.
 
 Resolve all critical and high severity alerts.
 
 Confirm that these tests still run:
-    npm run test:all
+    {cmdtest}
 
-Before you start, run the tests first and list which tests run to make sure that the same number of tests is actually running unless there is an intentional breakage tied to a security update.
-"""
-
-
-def eprint(message: str) -> None:
-    print(message, file=sys.stderr)
+Before you start, run the tests for a list which run to make sure that the same number of tests is actually running unless there is an intentional breakage tied to a security update."""
 
 
-def find_repo() -> Path:
-    """Find the local checkout for charmonator and return an absolute path."""
-    candidates = [
-        (Path.cwd() / "../charmonator").resolve(),
-        (Path(__file__).resolve().parent / "../charmonator").resolve(),
-        (Path.cwd() / "charmonator").resolve(),
-    ]
-
-    for candidate in candidates:
-        if candidate.exists() and candidate.is_dir():
-            return candidate
-
-    searched = "\n  - ".join(str(p) for p in candidates)
-    raise FileNotFoundError(
-        "Could not find the local charmonator checkout. Looked in:\n"
-        f"  - {searched}"
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run a Codex prompt to resolve critical/high Dependabot alerts."
     )
+    parser.add_argument(
+        "--codex",
+        required=True,
+        help="Path to a script that runs codex and forwards arguments with \"$@\".",
+    )
+    parser.add_argument(
+        "--project",
+        required=True,
+        help="GitHub repository in owner/repo form, for example CHARM-BDF/charmonator.",
+    )
+    parser.add_argument(
+        "--cmdtest",
+        required=True,
+        help="Command to run the preferred unit/integration tests.",
+    )
+    return parser.parse_args()
 
 
-def build_runner_command(runner: Path, prompt: str) -> List[str]:
-    """Invoke Python scripts via the current interpreter; otherwise execute directly."""
-    suffix = runner.suffix.lower()
-    if suffix == ".py":
-        return [sys.executable, str(runner), prompt]
-    return [str(runner), prompt]
+def resolve_codex_path(raw_path: str) -> str:
+    candidate = Path(raw_path).expanduser()
+    if candidate.is_file():
+        return str(candidate.resolve())
 
+    which = shutil.which(raw_path)
+    if which:
+        return which
+
+    raise FileNotFoundError(f"Codex runner not found: {raw_path}")
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        eprint(f"Usage: {Path(sys.argv[0]).name} /path/to/codex_runner")
+    args = parse_args()
+
+    try:
+        codex_path = resolve_codex_path(args.codex)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    if "GITHUB_TOKEN" not in os.environ or not os.environ["GITHUB_TOKEN"].strip():
-        eprint("Error: GITHUB_TOKEN must be set in the environment before running this script.")
-        return 2
+    prompt = build_prompt(args.project, args.cmdtest)
 
-    runner = Path(sys.argv[1]).expanduser().resolve()
-    if not runner.exists():
-        eprint(f"Error: runner script not found: {runner}")
-        return 2
-
-    repo_path = find_repo()
-    prompt = PROMPT_TEMPLATE.format(repo_path=repo_path)
-    command = build_runner_command(runner, prompt)
-
-    print(f"Using repository: {repo_path}")
-    print(f"Invoking runner: {runner}")
-    print("Command:")
-    print("  " + shlex.join(command))
-    print()
-    print("Prompt sent to Codex:")
-    print("-" * 80)
-    print(prompt.rstrip())
-    print("-" * 80)
-    print()
+    print("Submitting this prompt to Codex:\n", flush=True)
+    print(prompt, flush=True)
+    print("\n---\n", flush=True)
 
     env = os.environ.copy()
+    if not env.get("GITHUB_TOKEN"):
+        print(
+            "warning: GITHUB_TOKEN is not set in this environment; the Codex task may fail.",
+            file=sys.stderr,
+        )
+
     try:
-        completed = subprocess.run(command, env=env, check=False)
+        completed = subprocess.run([codex_path, prompt], env=env, check=False)
     except OSError as exc:
-        eprint(f"Error starting runner: {exc}")
-        return 1
+        print(f"error: failed to execute codex runner: {exc}", file=sys.stderr)
+        return 2
 
     return completed.returncode
 
